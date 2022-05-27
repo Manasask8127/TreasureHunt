@@ -94,6 +94,10 @@ class HuntMainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         // TODO: Step 7 add code to check that the user turned on their device location and ask
         //  again if they did not
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_TURN_DEVICE_LOCATION_ON) {
+            checkDeviceLocationSettingsAndStartGeofence(false)
+        }
     }
 
     /*
@@ -176,6 +180,42 @@ class HuntMainActivity : AppCompatActivity() {
      */
     private fun checkDeviceLocationSettingsAndStartGeofence(resolve:Boolean = true) {
         // TODO: Step 6 add code to check that the device's location is on
+        //1.create a LocationRequest, a LocationSettingsRequest Builder.
+        val locationRequest=LocationRequest.create().apply {
+            LocationRequest.PRIORITY_LOW_POWER
+        }
+        val builder=LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
+        //2.use LocationServices to get the Settings Client and create a val called locationSettingsResponseTask to check the location settings.
+        val settingsClient=LocationServices.getSettingsClient(this)
+        val locationSettingsResponseTask =
+            settingsClient.checkLocationSettings(builder.build())
+        //3.most interested in here is finding out if the location settings are not satisfied, add an onFailureListener() to the locationSettingsResponseTask.
+        locationSettingsResponseTask.addOnFailureListener { exception ->
+            //4.exception is of type ResolvableApiException and if so, try calling the startResolutionForResult() method in order to prompt the user to turn on device location.
+            if (exception is ResolvableApiException && resolve){
+                try {
+                    exception.startResolutionForResult(this@HuntMainActivity,
+                        REQUEST_TURN_DEVICE_LOCATION_ON)
+                } catch (sendEx: IntentSender.SendIntentException) {
+                    Log.d(TAG, "Error getting location settings resolution: " + sendEx.message)
+                }
+            }
+            //5.exception is not of type ResolvableApiException, present a snackbar that alerts the user that location needs to be enabled to play the treasure hunt.
+            else {
+                Snackbar.make(
+                    binding.activityMapsMain,
+                    R.string.location_required_error, Snackbar.LENGTH_INDEFINITE
+                ).setAction(android.R.string.ok) {
+                    checkDeviceLocationSettingsAndStartGeofence()
+                }.show()
+            }
+        }
+        //6.locationSettingsResponseTask does complete, check that it is successful, if so you will want to add the geofence.
+        locationSettingsResponseTask.addOnCompleteListener {
+            if ( it.isSuccessful ) {
+                addGeofenceForClue()
+            }
+        }
     }
 
     /*
